@@ -5,7 +5,7 @@ from freqtrade.strategy import IStrategy, IntParameter
 from pandas import DataFrame
 
 
-class FourBarMAConfirm(IStrategy):
+class DualMA(IStrategy):
     # --- 基础设置 ---
     timeframe = '1m'
     stoploss = -0.10

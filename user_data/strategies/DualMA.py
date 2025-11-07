@@ -1,4 +1,4 @@
-# user_data/strategies/FourBarMAConfirm.py
+# user_data/strategies/ThreeDayTurn.py
 
 import talib.abstract as ta
 from freqtrade.strategy import IStrategy, IntParameter
@@ -9,33 +9,36 @@ class DualMA(IStrategy):
     # --- 基础设置 ---
     timeframe = '1m'
     stoploss = -0.10
-    minimal_roi = {}  # ← 不设止盈，完全依赖趋势退出
+    minimal_roi = {}  # ← 不设止盈，完全靠趋势反转退出
 
-    # --- 可调参数 ---
-    fast_length = IntParameter(5, 20, default=10, space="buy")
-    slow_length = IntParameter(20, 50, default=30, space="buy")
-    confirm_bars = 4  # 连续确认K线数（固定为4）
+    # --- 参数设置 ---
+    ma_length = IntParameter(2, 6, default=3, space="buy")  # 3日均线
 
     def populate_indicators(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # 计算快慢均线
-        dataframe['fast_ma'] = ta.SMA(dataframe, timeperiod=self.fast_length.value)
-        dataframe['slow_ma'] = ta.SMA(dataframe, timeperiod=self.slow_length.value)
+        # 计算 3 日 SMA（技术平滑均线）
+        dataframe['ma'] = ta.SMA(dataframe, timeperiod=self.ma_length.value)
+
+        # 计算方向：1=上升，-1=下降，0=持平
+        dataframe['ma_direction'] = 0
+        dataframe.loc[dataframe['ma'] > dataframe['ma'].shift(1), 'ma_direction'] = 1
+        dataframe.loc[dataframe['ma'] < dataframe['ma'].shift(1), 'ma_direction'] = -1
+
         return dataframe
 
     def populate_entry_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # 要求最近 confirm_bars 根K线都满足 fast_ma > slow_ma
-        condition = True
-        for i in range(self.confirm_bars):
-            condition = condition & (dataframe['fast_ma'].shift(i) > dataframe['slow_ma'].shift(i))
-
+        # 拐头向上：前一根是下降（-1），当前是上升（1）
+        condition = (
+                (dataframe['ma_direction'].shift(1) == -1) &
+                (dataframe['ma_direction'] == 1)
+        )
         dataframe.loc[condition, 'enter_long'] = 1
         return dataframe
 
     def populate_exit_trend(self, dataframe: DataFrame, metadata: dict) -> DataFrame:
-        # 要求最近 confirm_bars 根K线都满足 fast_ma < slow_ma
-        condition = True
-        for i in range(self.confirm_bars):
-            condition = condition & (dataframe['fast_ma'].shift(i) < dataframe['slow_ma'].shift(i))
-
+        # 拐头向下：前一根是上升（1），当前是下降（-1）
+        condition = (
+                (dataframe['ma_direction'].shift(1) == 1) &
+                (dataframe['ma_direction'] == -1)
+        )
         dataframe.loc[condition, 'exit_long'] = 1
         return dataframe
